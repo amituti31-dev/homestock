@@ -1,0 +1,14 @@
+# Secrets — never commit these (see CLAUDE.md)
+receipt_scanner/.env
+receipt_scanner/android/app/google-services.json
+receipt_scanner/android/key.properties
+receipt_scanner/android/app/*.jks
+receipt_scanner/android/app/*.keystore
+
+# Downloaded price-transparency dumps (large, regenerable, not source)
+Barcods/
+shufersal_products.csv
+
+# Editor / OS noise not already covered by the per-app .gitignore files
+.DS_Store
+Thumbs.db

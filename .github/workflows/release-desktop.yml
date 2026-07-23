@@ -1,0 +1,47 @@
+name: Release desktop scanner
+
+# Builds the Windows scanner and publishes it as a GitHub release whenever
+# desktop_scanner changes on main. The release tag is just the run number
+# (v1, v2, ...) — the app compares that against its own build number
+# (embedded via --build-number at build time) to know when it's out of date.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'desktop_scanner/**'
+      - '.github/workflows/release-desktop.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Install dependencies
+        working-directory: desktop_scanner
+        run: flutter pub get
+
+      - name: Build Windows release
+        working-directory: desktop_scanner
+        run: flutter build windows --release --build-number=${{ github.run_number }}
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y
+
+      - name: Build installer
+        working-directory: desktop_scanner
+        run: '"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\HomeStockScanner.iss'
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: 'Scanner build ${{ github.run_number }}'
+          files: desktop_scanner/installer/Output/HomeStockScanner-Setup.exe
