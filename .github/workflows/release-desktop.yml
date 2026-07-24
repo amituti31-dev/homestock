@@ -37,7 +37,10 @@ jobs:
 
       - name: Build installer
         working-directory: desktop_scanner
-        run: '"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\HomeStockScanner.iss'
+        # pwsh (the default shell on windows-latest) needs the call operator
+        # to invoke a quoted path directly — without it this silently does
+        # nothing rather than running ISCC.
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\HomeStockScanner.iss'
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
