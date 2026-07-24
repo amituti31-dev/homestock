@@ -70,6 +70,9 @@ Receipt categories must be one of the exact English enum values in
 
 - Barcode: `mobile_scanner` → `BarcodeLookupService` (OpenFoodFacts, 6s timeout,
   returns null on any failure — barcode lookup is best-effort).
+  `BarcodeScannerScreen` has the same add/consume mode toggle as the desktop
+  scanner (see below) — consume mode bumps quantity down (or deletes at the
+  last unit) directly on detection, no sheet, no confirmation.
 - Notifications: `flutter_local_notifications` + `timezone`, scheduled per item
   expiry date. Lead days stored in `SharedPreferences` (`expiry_reminder_lead_days`,
   default 3).

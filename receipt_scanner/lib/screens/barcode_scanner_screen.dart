@@ -20,6 +20,17 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
   final _lookup = BarcodeLookupService();
   bool _processing = false;
 
+  /// Most scans are using something up, not buying it — this switches what a
+  /// scan *does*: in consume mode it bumps the quantity straight down (or
+  /// deletes at the last unit) with no sheet or confirmation, for a fast
+  /// scan-to-consume loop. The tinted app bar and frame are what stop you
+  /// from doing it in the wrong mode by mistake.
+  bool _consumeMode = false;
+
+  static const _addColor = Color(0xFF4CAF50);
+  static const _consumeColor = Color(0xFFE53935);
+  Color get _modeColor => _consumeMode ? _consumeColor : _addColor;
+
   @override
   void initState() {
     super.initState();
@@ -44,7 +55,9 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
       final existing = await _firestore.findItemByBarcode(barcode);
       if (!mounted) return;
 
-      if (existing != null) {
+      if (_consumeMode) {
+        await _handleConsumeScan(existing);
+      } else if (existing != null) {
         await _showExistingItemSheet(existing);
       } else {
         await _showNewItemFlow(barcode);
@@ -53,6 +66,34 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
       if (mounted) {
         setState(() => _processing = false);
         await _controller.start();
+      }
+    }
+  }
+
+  /// Consume mode: bumps the quantity down by one, or deletes the item once
+  /// it's down to the last one. A barcode with nothing in the inventory is a
+  /// no-op, not a create — there's nothing to take off.
+  Future<void> _handleConsumeScan(InventoryItem? existing) async {
+    if (existing == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('לא נמצא במלאי — אין מה להוריד')),
+      );
+      return;
+    }
+
+    if (existing.quantity <= 1) {
+      await _firestore.deleteItem(existing.id!);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${existing.name} הוסר לגמרי מהמלאי')),
+        );
+      }
+    } else {
+      await _firestore.incrementQuantity(existing.id!, -1);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${existing.name} — הכמות ירדה ל-${existing.quantity - 1}')),
+        );
       }
     }
   }
@@ -162,7 +203,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
         appBar: AppBar(
           title: const Text('סריקת ברקוד'),
           centerTitle: true,
-          backgroundColor: const Color(0xFF4CAF50),
+          backgroundColor: _modeColor,
           foregroundColor: Colors.white,
           actions: [
             IconButton(
@@ -179,7 +220,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
                 width: 260,
                 height: 160,
                 decoration: BoxDecoration(
-                  border: Border.all(color: const Color(0xFF4CAF50), width: 3),
+                  border: Border.all(color: _modeColor, width: 3),
                   borderRadius: BorderRadius.circular(16),
                 ),
               ),
@@ -192,11 +233,39 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
                 ),
               ),
             Positioned(
+              top: 16,
+              left: 16,
+              right: 16,
+              child: SegmentedButton<bool>(
+                segments: const [
+                  ButtonSegment(
+                    value: false,
+                    label: Text('הוספה למלאי'),
+                    icon: Icon(Icons.add_shopping_cart),
+                  ),
+                  ButtonSegment(
+                    value: true,
+                    label: Text('צריכה מהמלאי'),
+                    icon: Icon(Icons.remove_shopping_cart),
+                  ),
+                ],
+                selected: {_consumeMode},
+                onSelectionChanged: (s) => setState(() => _consumeMode = s.first),
+                style: SegmentedButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  selectedBackgroundColor: _modeColor,
+                  selectedForegroundColor: Colors.white,
+                ),
+              ),
+            ),
+            Positioned(
               bottom: 32,
               left: 0,
               right: 0,
               child: Text(
-                'כוונו את המצלמה לברקוד המוצר',
+                _consumeMode
+                    ? 'כוונו את המצלמה לברקוד — הכמות תרד ביחידה אחת'
+                    : 'כוונו את המצלמה לברקוד המוצר',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.white,
