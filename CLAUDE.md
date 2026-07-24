@@ -240,6 +240,27 @@ downloader — the XML schema is mandated and identical — but most chains sit
 behind per-chain credentials. Until then, `tool/import_price_file.dart` merges
 an already-downloaded price file (plain XML, not gzipped) from any chain into
 the same cache: `dart run tool/import_price_file.dart <PriceFull...xml>`.
+`tool/add_manual_product.dart` and `tool/remove_product.dart` add or remove one
+barcode by hand, for cases (like a product OFF has never heard of) no price
+file covers.
+
+### Seeding a fresh machine's index
+
+A brand-new machine's `refresh()` only ever pulls Shufersal — it has none of
+the other chains merged in by hand on the maintainer's machine. `SetupScreen`
+works around this: after `joinHousehold` succeeds, it best-effort downloads
+`product_index.json` from a GitHub release (`downloadSeed()` in
+`ProductIndexService`) and merges it in, so a fresh install starts with the
+same multi-chain index rather than just Shufersal's.
+
+That asset is attached **manually** to a release, not built by CI — CI has no
+access to the chain price files (`Barcods/`, gitignored, not worth committing:
+a few MB each, redownloadable). `downloadSeed()` scans releases newest-first
+for the first one still carrying a `product_index.json` asset, so it survives
+later code-only releases that don't re-attach it. To refresh the seed after a
+new round of manual merging, upload the current
+`%APPDATA%\HomeStock\HomeStock Scanner\product_index.json` as an asset on the
+latest release (GitHub → Releases → edit the release → attach file).
 
 ## Conventions
 

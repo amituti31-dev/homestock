@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../main.dart';
 import '../services/firestore_service.dart';
+import '../services/product_index_service.dart';
 
 /// One-time linking of this machine to a household, using the household ID as
 /// an invite code — the same code the mobile app's settings screen shows.
@@ -45,6 +46,16 @@ class _SetupScreenState extends State<SetupScreen> {
       await widget.firestore.joinHousehold(householdId);
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(householdIdKey, householdId);
+
+      // Best-effort: seed the local barcode index from the maintainer's
+      // pre-merged multi-chain dump, so this machine isn't limited to the
+      // Shufersal-only weekly refresh. Setup succeeds either way.
+      try {
+        final index = ProductIndexService();
+        await index.load();
+        await index.downloadSeed();
+      } catch (_) {}
+
       widget.onLinked(householdId);
     } catch (e) {
       if (mounted) {
