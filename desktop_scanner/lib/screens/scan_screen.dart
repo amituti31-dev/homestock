@@ -138,6 +138,34 @@ class _ScanScreenState extends State<ScanScreen> {
     }
   }
 
+  /// Manual re-trigger for `ProductIndexService.downloadSeed()` — the
+  /// automatic one on first setup swallows errors silently, so this is also
+  /// how to see *why* it didn't work, not just that it didn't.
+  Future<void> _downloadSeed() async {
+    if (_refreshingIndex) return;
+    setState(() => _refreshingIndex = true);
+    try {
+      final count = await _index.downloadSeed();
+      if (mounted) {
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('מאגר הענן יובא — $count מוצרים')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('ייבוא המאגר נכשל: ${e.toString().replaceFirst('Exception: ', '')}')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _refreshingIndex = false);
+        _refocus();
+      }
+    }
+  }
+
   @override
   void dispose() {
     _barcodeController.dispose();
@@ -321,6 +349,11 @@ class _ScanScreenState extends State<ScanScreen> {
             index: _index,
             refreshing: _refreshingIndex,
             onRefresh: _refreshIndex,
+          ),
+          IconButton(
+            onPressed: _refreshingIndex ? null : _downloadSeed,
+            icon: const Icon(Icons.cloud_download_outlined),
+            tooltip: 'ייבוא מאגר מוצרים מהענן',
           ),
           IconButton(
             onPressed: _confirmUnlink,
