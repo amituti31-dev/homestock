@@ -36,6 +36,16 @@ enum ScanStatus {
   /// Barcode already in the inventory — quantity was bumped instead.
   incremented,
 
+  /// Consume mode: quantity was bumped down by one.
+  decremented,
+
+  /// Consume mode: was down to the last unit, so the item was deleted.
+  removed,
+
+  /// Consume mode: barcode isn't in the inventory, so there's nothing to
+  /// take off — unlike add mode, this doesn't create anything.
+  notInInventory,
+
   failed,
 }
 
@@ -71,6 +81,11 @@ class _ScanScreenState extends State<ScanScreen> {
   bool _busy = false;
   bool _refreshingIndex = false;
   String _householdName = '';
+
+  /// Most scans are consuming something already in the house, not buying
+  /// new — so a toggle switches what a scan *does*, with the whole input
+  /// area tinted red/green so the current mode is unmistakable at a glance.
+  bool _consumeMode = false;
 
   @override
   void initState() {
@@ -199,6 +214,11 @@ class _ScanScreenState extends State<ScanScreen> {
       final existing =
           await widget.firestore.findItemByBarcode(widget.householdId, barcode);
 
+      if (_consumeMode) {
+        await _handleConsumeScan(barcode, existing);
+        return;
+      }
+
       if (existing != null) {
         // The server computes the new quantity; trust it over a local guess.
         existing.quantity = await widget.firestore
@@ -243,6 +263,41 @@ class _ScanScreenState extends State<ScanScreen> {
         setState(() => _busy = false);
         _refocus();
       }
+    }
+  }
+
+  /// Consume mode: bumps the quantity down by one, or deletes the item once
+  /// it's down to the last one — no confirmation, unlike the activity list's
+  /// remove button, since the whole point is a fast scan-to-consume loop.
+  /// A barcode with nothing in the inventory isn't an error, just a no-op:
+  /// there's nothing to take off.
+  Future<void> _handleConsumeScan(String barcode, InventoryItem? existing) async {
+    if (existing == null) {
+      _log(ScanEvent(
+        barcode: barcode,
+        item: InventoryItem(name: 'לא נמצא במלאי', barcode: barcode),
+        status: ScanStatus.notInInventory,
+      ));
+      return;
+    }
+
+    if (existing.quantity <= 1) {
+      await widget.firestore.deleteItem(widget.householdId, existing.id!);
+      _log(ScanEvent(
+        barcode: barcode,
+        item: existing,
+        status: ScanStatus.removed,
+        imageUrl: existing.photoUrl,
+      ));
+    } else {
+      existing.quantity = await widget.firestore
+          .incrementQuantity(widget.householdId, existing.id!, -1);
+      _log(ScanEvent(
+        barcode: barcode,
+        item: existing,
+        status: ScanStatus.decremented,
+        imageUrl: existing.photoUrl,
+      ));
     }
   }
 
@@ -372,6 +427,11 @@ class _ScanScreenState extends State<ScanScreen> {
               controller: _barcodeController,
               focusNode: _barcodeFocus,
               busy: _busy,
+              consumeMode: _consumeMode,
+              onModeChanged: (v) => setState(() {
+                _consumeMode = v;
+                _refocus();
+              }),
               onSubmitted: _handleScan,
             ),
             const Divider(height: 1),
@@ -440,35 +500,72 @@ class _ScannerInput extends StatelessWidget {
     required this.controller,
     required this.focusNode,
     required this.busy,
+    required this.consumeMode,
+    required this.onModeChanged,
     required this.onSubmitted,
   });
 
   final TextEditingController controller;
   final FocusNode focusNode;
   final bool busy;
+  final bool consumeMode;
+  final ValueChanged<bool> onModeChanged;
   final ValueChanged<String> onSubmitted;
+
+  static const _addColor = Color(0xFF4CAF50);
+  static const _consumeColor = Color(0xFFE53935);
 
   @override
   Widget build(BuildContext context) {
+    final modeColor = consumeMode ? _consumeColor : _addColor;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 24),
-      color: Theme.of(context).colorScheme.surfaceContainerLowest,
+      color: modeColor.withValues(alpha: 0.08),
       child: Column(
         children: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(
+                  value: false,
+                  label: Text('הוספה למלאי'),
+                  icon: Icon(Icons.add_shopping_cart),
+                ),
+                ButtonSegment(
+                  value: true,
+                  label: Text('צריכה מהמלאי'),
+                  icon: Icon(Icons.remove_shopping_cart),
+                ),
+              ],
+              selected: {consumeMode},
+              onSelectionChanged: (s) => onModeChanged(s.first),
+              style: SegmentedButton.styleFrom(
+                selectedBackgroundColor: modeColor,
+                selectedForegroundColor: Colors.white,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           Icon(
             busy ? Icons.hourglass_top : Icons.qr_code_scanner,
             size: 48,
-            color: const Color(0xFF4CAF50),
+            color: modeColor,
           ),
           const SizedBox(height: 12),
           Text(
-            busy ? 'מעבד...' : 'סרוק מוצר',
+            busy
+                ? 'מעבד...'
+                : (consumeMode ? 'סרוק מוצר לצריכה' : 'סרוק מוצר להוספה'),
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 4),
           Text(
-            'הסורק מקליד את הברקוד לחלון הזה. אפשר גם להקליד ידנית וללחוץ Enter.',
+            consumeMode
+                ? 'הכמות תרד ביחידה אחת, או שהמוצר יימחק אם זו היחידה האחרונה.'
+                : 'הסורק מקליד את הברקוד לחלון הזה. אפשר גם להקליד ידנית וללחוץ Enter.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 16),
@@ -550,6 +647,24 @@ class _EventTile extends StatelessWidget {
           icon: Icons.add_circle,
           label: 'כבר במלאי — הכמות עודכנה ל-${event.item.quantity.toStringAsFixed(0)}'
         );
+      case ScanStatus.decremented:
+        return (
+          color: Colors.deepOrange,
+          icon: Icons.remove_circle,
+          label: 'ירד מהמלאי — הכמות עודכנה ל-${event.item.quantity.toStringAsFixed(0)}'
+        );
+      case ScanStatus.removed:
+        return (
+          color: Colors.red,
+          icon: Icons.delete,
+          label: 'האחרון — הוסר לגמרי מהמלאי'
+        );
+      case ScanStatus.notInInventory:
+        return (
+          color: Colors.grey,
+          icon: Icons.search_off,
+          label: 'לא נמצא במלאי — אין מה להוריד'
+        );
       case ScanStatus.failed:
         return (color: Colors.red, icon: Icons.error, label: event.message ?? 'שגיאה');
     }
@@ -558,7 +673,9 @@ class _EventTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = _style;
-    final failed = event.status == ScanStatus.failed;
+    // No item to act on: creation failed, the barcode wasn't in the
+    // inventory to begin with, or it was just deleted by this very scan.
+    final noActions = event.item.id == null || event.status == ScanStatus.removed;
 
     return Card(
       margin: EdgeInsets.zero,
@@ -591,7 +708,7 @@ class _EventTile extends StatelessWidget {
             ),
           ],
         ),
-        trailing: failed
+        trailing: noActions
             ? null
             : Row(
                 mainAxisSize: MainAxisSize.min,

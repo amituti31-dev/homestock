@@ -211,6 +211,15 @@ item. A miss is **not** an error: the item is still created as 'מוצר לא מ
 so the scanning loop never blocks, and the activity list offers an edit dialog
 to name it.
 
+A `SegmentedButton` above the scanner input switches between **add mode**
+(green tint, the default — the flow above) and **consume mode** (red tint):
+scanning bumps the quantity *down* by one instead, or deletes the item once
+it's down to the last unit. A barcode not already in the inventory is a no-op
+in consume mode, not a create — there's nothing to take off. No confirmation
+dialog, unlike the activity list's own remove button: the point of the mode
+is a fast scan-to-consume loop, and the tinted background is what stops you
+from doing it in the wrong mode by mistake.
+
 ### Product lookup: local index first, then Open Food Facts
 
 `ProductResolver` chains two sources, and the order is deliberate:
