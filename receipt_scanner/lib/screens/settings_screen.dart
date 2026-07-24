@@ -137,47 +137,75 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _joinHouseholdDialog() async {
-    final controller = TextEditingController();
-    final code = await showDialog<String>(
+    final codeController = TextEditingController();
+    final emailController = TextEditingController();
+    String? error;
+    final result = await showDialog<(String, String)>(
       context: context,
       builder: (ctx) => Directionality(
         textDirection: TextDirection.rtl,
-        child: AlertDialog(
-          title: const Text('הצטרפות למשק בית'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'הזן את קוד ההזמנה שקיבלת. שים לב: תעזוב את משק הבית הנוכחי שלך.',
-                style: TextStyle(fontSize: 13, color: Colors.grey),
+        child: StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return AlertDialog(
+              title: const Text('הצטרפות למשק בית'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'הזן את קוד ההזמנה שקיבלת ואת האימייל שלך, כדי שבני הבית '
+                    'ידעו מי הצטרף. שים לב: תעזוב את משק הבית הנוכחי שלך.',
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: codeController,
+                    decoration: const InputDecoration(labelText: 'קוד הזמנה'),
+                    autofocus: true,
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: emailController,
+                    decoration: const InputDecoration(labelText: 'אימייל'),
+                    keyboardType: TextInputType.emailAddress,
+                    textDirection: TextDirection.ltr,
+                  ),
+                  if (error != null) ...[
+                    const SizedBox(height: 8),
+                    Text(error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+                  ],
+                ],
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: controller,
-                decoration: const InputDecoration(labelText: 'קוד הזמנה'),
-                autofocus: true,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-                onPressed: () => Navigator.pop(ctx), child: const Text('ביטול')),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF4CAF50),
-                  foregroundColor: Colors.white),
-              onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-              child: const Text('הצטרף'),
-            ),
-          ],
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('ביטול')),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF4CAF50),
+                      foregroundColor: Colors.white),
+                  onPressed: () {
+                    final code = codeController.text.trim();
+                    final email = emailController.text.trim();
+                    if (code.isEmpty || email.isEmpty || !email.contains('@')) {
+                      setDialogState(() => error = 'יש להזין קוד הזמנה ואימייל תקין');
+                      return;
+                    }
+                    Navigator.pop(ctx, (code, email));
+                  },
+                  child: const Text('הצטרף'),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
-    if (code == null || code.isEmpty) return;
+    if (result == null) return;
+    final (code, email) = result;
 
     try {
-      await _auth.joinHousehold(code);
+      await _auth.joinHousehold(code, email);
       widget.onHouseholdChanged();
     } catch (e) {
       if (!mounted) return;

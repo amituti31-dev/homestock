@@ -38,13 +38,14 @@ class AuthService {
     return householdId;
   }
 
-  Future<void> _updateMemberProfile(String householdId, String uid) async {
+  Future<void> _updateMemberProfile(String householdId, String uid,
+      {String? email}) async {
     final user = _auth.currentUser;
     if (user == null) return;
     await _db.doc('households/$householdId').update({
       'memberProfiles.$uid': {
         'displayName': user.displayName ?? 'אורח',
-        'email': user.email,
+        'email': email ?? user.email,
         'isAnonymous': user.isAnonymous,
       },
     });
@@ -93,7 +94,7 @@ class AuthService {
 
   /// Joins an existing household by its ID. The current user leaves any
   /// household they're already a member of. Returns the new householdId.
-  Future<String> joinHousehold(String targetHouseholdId) async {
+  Future<String> joinHousehold(String targetHouseholdId, String email) async {
     final user = _auth.currentUser;
     if (user == null) throw Exception('לא מחובר');
     final uid = user.uid;
@@ -108,7 +109,7 @@ class AuthService {
       'members': FieldValue.arrayUnion([uid]),
     });
     await _db.collection('users').doc(uid).set({'householdId': targetHouseholdId});
-    await _updateMemberProfile(targetHouseholdId, uid);
+    await _updateMemberProfile(targetHouseholdId, uid, email: email);
 
     return targetHouseholdId;
   }
