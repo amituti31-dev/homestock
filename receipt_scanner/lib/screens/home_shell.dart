@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../services/update_service.dart';
 import 'add_edit_item_screen.dart';
 import 'barcode_scanner_screen.dart';
 import 'home_overview_screen.dart';
@@ -23,6 +25,38 @@ class HomeShell extends StatefulWidget {
 
 class _HomeShellState extends State<HomeShell> {
   int _index = 0;
+  final _updateService = UpdateService();
+
+  @override
+  void initState() {
+    super.initState();
+    _checkForUpdate();
+  }
+
+  Future<void> _checkForUpdate() async {
+    final update = await _updateService.checkForUpdate();
+    if (!mounted || update == null) return;
+
+    ScaffoldMessenger.of(context).showMaterialBanner(
+      MaterialBanner(
+        content: Text('גרסה חדשה זמינה (${update.version})'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              launchUrl(Uri.parse(update.downloadUrl),
+                  mode: LaunchMode.externalApplication);
+            },
+            child: const Text('הורדה'),
+          ),
+          TextButton(
+            onPressed: () =>
+                ScaffoldMessenger.of(context).hideCurrentMaterialBanner(),
+            child: const Text('סגירה'),
+          ),
+        ],
+      ),
+    );
+  }
 
   late final List<Widget> _screens = [
     HomeOverviewScreen(householdId: widget.householdId),

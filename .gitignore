@@ -2,6 +2,7 @@
 receipt_scanner/.env
 receipt_scanner/android/app/google-services.json
 receipt_scanner/android/key.properties
+receipt_scanner/android/keystore/
 receipt_scanner/android/app/*.jks
 receipt_scanner/android/app/*.keystore
 

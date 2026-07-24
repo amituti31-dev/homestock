@@ -1,0 +1,68 @@
+name: Release mobile app
+
+# Builds the Android app and publishes it as a GitHub release whenever
+# receipt_scanner changes on main. Tagged android-vN (not vN, which the
+# desktop scanner's workflow already uses) so the two release streams don't
+# collide — each app's UpdateService filters releases by its own prefix.
+#
+# Needs four repo secrets (Settings > Secrets and variables > Actions):
+#   GEMINI_API_KEY              — same value as receipt_scanner/.env
+#   GOOGLE_SERVICES_JSON_BASE64 — `base64 -w0 android/app/google-services.json`
+#   ANDROID_KEYSTORE_BASE64     — `base64 -w0 android/keystore/homestock-release.jks`
+#   ANDROID_KEYSTORE_PASSWORD   — the keystore/key password (same for both)
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'receipt_scanner/**'
+      - '.github/workflows/release-mobile.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # Release signing must be stable across builds (see the comment in
+      # android/app/build.gradle.kts) — the keystore itself lives in a
+      # secret, not the repo.
+      - name: Write secrets to files
+        working-directory: receipt_scanner
+        run: |
+          echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
+          echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 -d > android/app/google-services.json
+          mkdir -p android/keystore
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/keystore/homestock-release.jks
+          cat > android/key.properties <<KEYPROPS
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyPassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyAlias=homestock
+          storeFile=keystore/homestock-release.jks
+          KEYPROPS
+
+      - name: Install dependencies
+        working-directory: receipt_scanner
+        run: flutter pub get
+
+      - name: Build APK
+        working-directory: receipt_scanner
+        run: flutter build apk --release --build-number=${{ github.run_number }}
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-v${{ github.run_number }}
+          name: 'Mobile build ${{ github.run_number }}'
+          files: receipt_scanner/build/app/outputs/flutter-apk/app-release.apk

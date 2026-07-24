@@ -83,6 +83,33 @@ Receipt categories must be one of the exact English enum values in
   and bundled as an asset. `.env` and `google-services.json` are untracked (see
   root `.gitignore`) — never paste their contents into code, logs, or commits.
 
+### Releases & self-update
+
+`.github/workflows/release-mobile.yml` builds and publishes a GitHub release
+on every push to `main` that touches `receipt_scanner/`, tagged `android-vN`
+(desktop's workflow already uses plain `vN`, so the two release streams stay
+distinguishable in the same repo). The APK is built with
+`--build-number=<run number>` to match.
+
+**Release signing must stay stable across builds** — a CI-built APK has to
+install as an *update* over a previous one, which Android only allows if both
+are signed with the same key. `android/app/build.gradle.kts` reads
+`android/key.properties` (untracked) for the release signing config, falling
+back to the debug key only when that file is absent (so a fresh clone can
+still `flutter run --release`, just not produce an installable-as-update
+APK). The actual keystore lives outside the repo, base64-encoded into a
+GitHub secret; the workflow decodes it before building. Four repo secrets are
+required (Settings > Secrets and variables > Actions):
+`GEMINI_API_KEY`, `GOOGLE_SERVICES_JSON_BASE64`, `ANDROID_KEYSTORE_BASE64`,
+`ANDROID_KEYSTORE_PASSWORD`.
+
+`services/update_service.dart` (present in both apps, near-identical) lists
+`.../releases` rather than hitting `.../releases/latest`, and picks the
+newest release matching its own tag pattern (`vN` or `android-vN`) — with two
+release streams in one repo, "latest" could just as easily be the other app's
+release. A newer build shows a dismissible `MaterialBanner` linking to the
+download; neither app self-replaces its own running binary.
+
 ---
 
 # desktop_scanner (Windows)
