@@ -62,13 +62,27 @@ class _InventoryListScreenState extends State<InventoryListScreen> {
     );
     if (confirmed != true) return;
 
+    // One failure (e.g. cancelling a reminder for an item that never had
+    // one) used to abort the whole loop, leaving the rest un-deleted and
+    // selection mode stuck open. Each item is now independent, and
+    // selection always clears at the end regardless of failures.
     final ids = List<String>.from(_selectedIds);
+    var failures = 0;
     for (final id in ids) {
-      await _firestore.deleteItem(id);
-      await _notifications.cancelExpiryReminder(id);
+      try {
+        await _firestore.deleteItem(id);
+        await _notifications.cancelExpiryReminder(id);
+      } catch (_) {
+        failures++;
+      }
     }
     if (!mounted) return;
     setState(() => _selectedIds.clear());
+    if (failures > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$failures מתוך ${ids.length} פריטים לא נמחקו')),
+      );
+    }
   }
 
   @override
