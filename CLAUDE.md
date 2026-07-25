@@ -243,46 +243,37 @@ So a hit in the index still queries OFF for an image, which is what
 `parsePriceFile` uses the streaming `parseEvents` API, not `XmlDocument`: the
 files are ~5 MB of XML holding a flat item list, and a full tree is wasted work
 (measured: 6,435 products in ~200 ms). It's no longer called at runtime (see
-below) but stays around for `tool/generate_shufersal_asset.dart` and its tests.
+below) but stays around for `tool/generate_price_asset.dart` and its tests.
 
-`refresh()` **merges** the bundled Shufersal seed into `_index` rather than
-replacing it — barcodes from other chains, added separately, survive a
-refresh. It used to download live from `prices.shufersal.co.il`, but some
+### Bundled chain seeds, not a live download
+
+`refresh()` used to download live from `prices.shufersal.co.il`, but some
 machines fail TLS certificate verification against arbitrary external hosts
-(seen in the field against both Shufersal's site and GitHub's), so `refresh()`
-now reads `assets/shufersal_seed.json`, bundled into the app at build time —
-trading freshness for working identically on every install regardless of that
-machine's certificate store. Regenerating it means re-running
-`dart run tool/generate_shufersal_asset.dart <PriceFull...xml>` (writes
-`assets/shufersal_seed.json`) and shipping a new release — not something a
-running install can refresh on its own.
+(seen in the field against both Shufersal's site and GitHub's, for reasons
+outside this app's control — Windows-machine-specific root certificate
+issues). So instead, **every chain's price data ships bundled inside the
+app**: `assets/{shufersal,yohananof,superpharm,hatzi_hinam}_seed.json`, one
+per chain, generated from a price file with `dart run
+tool/generate_price_asset.dart <PriceFull...xml> <name>` (writes
+`assets/<name>_seed.json`). `refresh()` just loads and merges all four via
+`rootBundle` — no network call, so it behaves identically on every install
+regardless of that machine's certificate store. The trade-off is freshness:
+refreshing the data means regenerating the assets and shipping a new release,
+not something a running install can do on its own — a fresh machine gets the
+full multi-chain index automatically on first launch (`_loadIndex` in
+`ScanScreen` treats a never-refreshed index as stale and calls `refresh()`
+silently), no setup step required.
 
-Adding another chain means writing another downloader — the XML schema is
-mandated and identical — but most chains sit behind per-chain credentials.
-Until then, `tool/import_price_file.dart` merges an already-downloaded price
-file (plain XML, not gzipped) from any chain into the on-disk cache directly
-(not the bundled asset): `dart run tool/import_price_file.dart
-<PriceFull...xml>`. `tool/add_manual_product.dart` and
-`tool/remove_product.dart` add or remove one barcode by hand, for cases (like
-a product OFF has never heard of) no price file covers.
-
-### Seeding a fresh machine's index
-
-A brand-new machine's `refresh()` only ever pulls Shufersal — it has none of
-the other chains merged in by hand on the maintainer's machine. `SetupScreen`
-works around this: after `joinHousehold` succeeds, it best-effort downloads
-`product_index.json` from a GitHub release (`downloadSeed()` in
-`ProductIndexService`) and merges it in, so a fresh install starts with the
-same multi-chain index rather than just Shufersal's.
-
-That asset is attached **manually** to a release, not built by CI — CI has no
-access to the chain price files (`Barcods/`, gitignored, not worth committing:
-a few MB each, redownloadable). `downloadSeed()` scans releases newest-first
-for the first one still carrying a `product_index.json` asset, so it survives
-later code-only releases that don't re-attach it. To refresh the seed after a
-new round of manual merging, upload the current
-`%APPDATA%\HomeStock\HomeStock Scanner\product_index.json` as an asset on the
-latest release (GitHub → Releases → edit the release → attach file).
+Adding another chain means finding its price-transparency feed and running
+the generator against it — the XML schema is mandated and identical across
+chains, so no new parser is needed, only a new `assets/<name>_seed.json` plus
+a line in `pubspec.yaml`'s `flutter.assets`. `tool/import_price_file.dart`
+merges an already-downloaded price file directly into the on-disk cache
+instead (not a bundled asset) for one-off additions between releases:
+`dart run tool/import_price_file.dart <PriceFull...xml>`.
+`tool/add_manual_product.dart` and `tool/remove_product.dart` add or remove
+one barcode by hand, for cases (like a product OFF has never heard of) no
+price file covers.
 
 ## Conventions
 

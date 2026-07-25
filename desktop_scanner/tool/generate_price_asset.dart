@@ -1,8 +1,10 @@
-// Regenerates the bundled Shufersal seed asset from a price file, for cases
-// where the live download (prices.shufersal.co.il) is unreliable or blocked
-// on some machines — see CLAUDE.md "Bundled Shufersal seed".
+// Regenerates a bundled per-chain seed asset from a price file. The app
+// bundles one of these per chain instead of downloading live — some machines
+// fail TLS verification against arbitrary external hosts — so every chain's
+// data has to ship inside the app itself. See CLAUDE.md "Bundled chain seeds".
 //
-// Usage: dart run tool/generate_shufersal_asset.dart <PriceFull...xml>
+// Usage: dart run tool/generate_price_asset.dart <PriceFull...xml> <output-name>
+// e.g.:  dart run tool/generate_price_asset.dart Barcods/יוחננוף/PriceFull....xml yohananof
 import 'dart:convert';
 import 'dart:io';
 
@@ -55,8 +57,8 @@ Map<String, Map<String, dynamic>> _parsePriceFile(String xml) {
 }
 
 void main(List<String> args) {
-  if (args.isEmpty) {
-    stderr.writeln('Usage: dart run tool/generate_shufersal_asset.dart <price-file.xml>');
+  if (args.length < 2) {
+    stderr.writeln('Usage: dart run tool/generate_price_asset.dart <price-file.xml> <output-name>');
     exit(1);
   }
 
@@ -67,7 +69,7 @@ void main(List<String> args) {
     exit(1);
   }
 
-  final outFile = File('assets/shufersal_seed.json');
+  final outFile = File('assets/${args[1]}_seed.json');
   outFile.parent.createSync(recursive: true);
   outFile.writeAsStringSync(jsonEncode({
     'generatedAt': DateTime.now().toIso8601String(),

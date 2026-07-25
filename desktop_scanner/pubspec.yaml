@@ -66,6 +66,9 @@ flutter:
 
   assets:
     - assets/shufersal_seed.json
+    - assets/yohananof_seed.json
+    - assets/superpharm_seed.json
+    - assets/hatzi_hinam_seed.json
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
