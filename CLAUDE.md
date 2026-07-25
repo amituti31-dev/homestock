@@ -72,7 +72,9 @@ Receipt categories must be one of the exact English enum values in
   returns null on any failure — barcode lookup is best-effort).
   `BarcodeScannerScreen` has the same add/consume mode toggle as the desktop
   scanner (see below) — consume mode bumps quantity down (or deletes at the
-  last unit) directly on detection, no sheet, no confirmation.
+  last unit) directly on detection, no sheet, no confirmation. New items get
+  a category guess from `CategoryClassifier` (see below) rather than always
+  defaulting to food.
 - Notifications: `flutter_local_notifications` + `timezone`, scheduled per item
   expiry date. Lead days stored in `SharedPreferences` (`expiry_reminder_lead_days`,
   default 3).
@@ -212,7 +214,11 @@ so `_refocus()` is called after every dialog, tap and completed scan.
 Barcode → already in inventory? bump quantity : resolve the product → create the
 item. A miss is **not** an error: the item is still created as 'מוצר לא מזוהה'
 so the scanning loop never blocks, and the activity list offers an edit dialog
-to name it.
+to name it. A resolved product's name also goes through `CategoryClassifier`
+(keyword matching against real product-name vocabulary — no Gemini here, that
+stays on the phone's receipt flow) so new items land in a real category
+instead of always defaulting to food; still editable afterward, it's a guess,
+not a guarantee. Duplicated into `receipt_scanner` for its own barcode flow.
 
 A `SegmentedButton` above the scanner input switches between **add mode**
 (green tint, the default — the flow above) and **consume mode** (red tint):

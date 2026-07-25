@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../models/inventory_category.dart';
 import '../models/inventory_item.dart';
+import '../services/category_classifier.dart';
 import '../services/firestore_service.dart';
 import '../services/product_index_service.dart';
 import '../services/product_resolver.dart';
@@ -207,6 +209,9 @@ class _ScanScreenState extends State<ScanScreen> {
       final product = await _resolver.resolve(barcode);
       final item = InventoryItem(
         name: product?.name ?? 'מוצר לא מזוהה',
+        category: product == null
+            ? InventoryCategory.food
+            : CategoryClassifier.classify(product.name),
         barcode: barcode,
         photoUrl: product?.imageUrl,
         price: product?.price,

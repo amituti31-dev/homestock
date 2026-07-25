@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import '../models/inventory_category.dart';
 import '../models/inventory_item.dart';
 import '../services/barcode_lookup_service.dart';
+import '../services/category_classifier.dart';
 import '../services/firestore_service.dart';
 import 'add_edit_item_screen.dart';
 
@@ -187,6 +189,9 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
           householdId: widget.householdId,
           prefillItem: InventoryItem(
             name: product?.name ?? '',
+            category: product == null
+                ? InventoryCategory.food
+                : CategoryClassifier.classify(product.name),
             barcode: barcode,
             source: 'barcode_scan',
           ),
