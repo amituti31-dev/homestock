@@ -242,19 +242,29 @@ So a hit in the index still queries OFF for an image, which is what
 
 `parsePriceFile` uses the streaming `parseEvents` API, not `XmlDocument`: the
 files are ~5 MB of XML holding a flat item list, and a full tree is wasted work
-(measured: 6,435 products in ~200 ms).
+(measured: 6,435 products in ~200 ms). It's no longer called at runtime (see
+below) but stays around for `tool/generate_shufersal_asset.dart` and its tests.
 
-`refresh()` (weekly, on launch, and via the manual refresh action) downloads
-only from Shufersal and **merges** the result into `_index` rather than
+`refresh()` **merges** the bundled Shufersal seed into `_index` rather than
 replacing it — barcodes from other chains, added separately, survive a
-refresh. Adding another chain's *automatic* download means writing another
-downloader — the XML schema is mandated and identical — but most chains sit
-behind per-chain credentials. Until then, `tool/import_price_file.dart` merges
-an already-downloaded price file (plain XML, not gzipped) from any chain into
-the same cache: `dart run tool/import_price_file.dart <PriceFull...xml>`.
-`tool/add_manual_product.dart` and `tool/remove_product.dart` add or remove one
-barcode by hand, for cases (like a product OFF has never heard of) no price
-file covers.
+refresh. It used to download live from `prices.shufersal.co.il`, but some
+machines fail TLS certificate verification against arbitrary external hosts
+(seen in the field against both Shufersal's site and GitHub's), so `refresh()`
+now reads `assets/shufersal_seed.json`, bundled into the app at build time —
+trading freshness for working identically on every install regardless of that
+machine's certificate store. Regenerating it means re-running
+`dart run tool/generate_shufersal_asset.dart <PriceFull...xml>` (writes
+`assets/shufersal_seed.json`) and shipping a new release — not something a
+running install can refresh on its own.
+
+Adding another chain means writing another downloader — the XML schema is
+mandated and identical — but most chains sit behind per-chain credentials.
+Until then, `tool/import_price_file.dart` merges an already-downloaded price
+file (plain XML, not gzipped) from any chain into the on-disk cache directly
+(not the bundled asset): `dart run tool/import_price_file.dart
+<PriceFull...xml>`. `tool/add_manual_product.dart` and
+`tool/remove_product.dart` add or remove one barcode by hand, for cases (like
+a product OFF has never heard of) no price file covers.
 
 ### Seeding a fresh machine's index
 
