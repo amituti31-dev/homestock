@@ -261,8 +261,10 @@ issues). So instead, **every chain's price data ships bundled inside the
 app**: `assets/{shufersal,yohananof,superpharm,hatzi_hinam}_seed.json`, one
 per chain, generated from a price file with `dart run
 tool/generate_price_asset.dart <PriceFull...xml> <name>` (writes
-`assets/<name>_seed.json`). `refresh()` just loads and merges all four via
-`rootBundle` — no network call, so it behaves identically on every install
+`assets/<name>_seed.json`), plus `assets/manual_additions_seed.json` for
+barcodes with no chain file at all (see below). `refresh()` just loads and
+merges all five via `rootBundle` — no network call, so it behaves identically
+on every install
 regardless of that machine's certificate store. The trade-off is freshness:
 refreshing the data means regenerating the assets and shipping a new release,
 not something a running install can do on its own — a fresh machine gets the
@@ -279,7 +281,11 @@ instead (not a bundled asset) for one-off additions between releases:
 `dart run tool/import_price_file.dart <PriceFull...xml>`.
 `tool/add_manual_product.dart` and `tool/remove_product.dart` add or remove
 one barcode by hand, for cases (like a product OFF has never heard of) no
-price file covers.
+price file covers — by default against the local cache; `--bundle` instead
+writes to `assets/manual_additions_seed.json`, for a one-off addition that
+should reach every install once released, not just this machine. It verifies
+the JSON round-trips before writing, since a Hebrew name mangled by argument
+encoding should fail loudly there, not silently corrupt the file.
 
 ## Conventions
 
