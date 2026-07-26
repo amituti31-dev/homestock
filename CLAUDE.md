@@ -125,7 +125,10 @@ document that's gone.
   scanner (see below) — consume mode bumps quantity down (or deletes at the
   last unit) directly on detection, no sheet, no confirmation. New items get
   classified by Gemini first, `CategoryClassifier` as fallback (see "Gemini"
-  above), rather than always defaulting to food.
+  above), rather than always defaulting to food. A keyboard icon in the app
+  bar opens a manual-entry dialog for a damaged/unscannable barcode — it
+  feeds the same `_handleBarcode` the camera detector uses, so a typed
+  barcode goes through identical lookup/classify/consume-mode handling.
 - Notifications: `flutter_local_notifications` + `timezone`, scheduled per item
   expiry date. Lead days stored in `SharedPreferences` (`expiry_reminder_lead_days`,
   default 3).

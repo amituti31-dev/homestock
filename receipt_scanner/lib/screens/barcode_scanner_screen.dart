@@ -48,10 +48,16 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
   }
 
   Future<void> _onDetect(BarcodeCapture capture) async {
-    if (_processing) return;
     final barcode = capture.barcodes.firstOrNull?.rawValue;
     if (barcode == null) return;
+    await _handleBarcode(barcode);
+  }
 
+  /// Shared by both the camera detector and manual entry, so a typed-in
+  /// barcode goes through the exact same lookup/classify/consume-mode flow
+  /// as a scanned one.
+  Future<void> _handleBarcode(String barcode) async {
+    if (_processing) return;
     setState(() => _processing = true);
     await _controller.stop();
 
@@ -72,6 +78,38 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
         await _controller.start();
       }
     }
+  }
+
+  Future<void> _showManualEntryDialog() async {
+    final controller = TextEditingController();
+    final barcode = await showDialog<String>(
+      context: context,
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: AlertDialog(
+          title: const Text('הזנת ברקוד ידנית'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(hintText: 'מספר ברקוד'),
+            onSubmitted: (value) => Navigator.pop(ctx, value.trim()),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('ביטול'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+              child: const Text('אישור'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (barcode == null || barcode.isEmpty) return;
+    await _handleBarcode(barcode);
   }
 
   /// Consume mode: bumps the quantity down by one, or deletes the item once
@@ -229,6 +267,11 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
           backgroundColor: _modeColor,
           foregroundColor: Colors.white,
           actions: [
+            IconButton(
+              icon: const Icon(Icons.keyboard),
+              tooltip: 'הזנת ברקוד ידנית',
+              onPressed: _showManualEntryDialog,
+            ),
             IconButton(
               icon: const Icon(Icons.flash_on),
               onPressed: () => _controller.toggleTorch(),
