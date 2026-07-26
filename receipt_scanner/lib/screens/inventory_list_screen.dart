@@ -118,6 +118,12 @@ class _InventoryListScreenState extends State<InventoryListScreen> {
         minQuantity: item.minQuantity,
       ));
     }
+
+    // Ran out entirely — suggest buying more, regardless of whether a
+    // minQuantity threshold is even set.
+    if (item.quantity > 0 && newQuantity == 0) {
+      await _firestore.addLowStockToShoppingList([item]);
+    }
   }
 
   @override

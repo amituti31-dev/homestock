@@ -119,7 +119,20 @@ class FirestoreService {
 
   Future<void> markShoppingListItemBought(ShoppingListItem item) async {
     if (item.inventoryItemId != null) {
-      await incrementQuantity(item.inventoryItemId!, item.quantity);
+      // The linked item may no longer exist — consuming the last unit
+      // deletes the inventory record rather than leaving it at zero, so
+      // buying it back means creating it again, not updating a ghost.
+      final doc = await _items.doc(item.inventoryItemId).get();
+      if (doc.exists) {
+        await incrementQuantity(item.inventoryItemId!, item.quantity);
+      } else {
+        await addItem(InventoryItem(
+          name: item.name,
+          category: item.category,
+          quantity: item.quantity,
+          unit: item.unit,
+        ));
+      }
     }
     await _shoppingList.doc(item.id).delete();
   }

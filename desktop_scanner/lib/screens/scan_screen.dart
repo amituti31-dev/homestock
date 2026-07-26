@@ -259,6 +259,8 @@ class _ScanScreenState extends State<ScanScreen> {
     }
 
     if (existing.quantity <= 1) {
+      // Ran out entirely — suggest buying more before the record disappears.
+      await widget.firestore.addToShoppingList(widget.householdId, existing);
       await widget.firestore.deleteItem(widget.householdId, existing.id!);
       _log(ScanEvent(
         barcode: barcode,
@@ -334,6 +336,8 @@ class _ScanScreenState extends State<ScanScreen> {
 
     try {
       if (willDelete) {
+        // Ran out entirely — suggest buying more before the record disappears.
+        await widget.firestore.addToShoppingList(widget.householdId, event.item);
         await widget.firestore.deleteItem(widget.householdId, itemId);
         if (mounted) setState(() => _events.remove(event));
       } else {

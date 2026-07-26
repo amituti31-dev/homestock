@@ -84,10 +84,12 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
     }
 
     if (existing.quantity <= 1) {
+      // Ran out entirely — suggest buying more before the record disappears.
+      await _firestore.addLowStockToShoppingList([existing]);
       await _firestore.deleteItem(existing.id!);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${existing.name} הוסר לגמרי מהמלאי')),
+          SnackBar(content: Text('${existing.name} נגמר — נוסף לרשימת הקניות')),
         );
       }
     } else {
@@ -131,6 +133,10 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
                             ? null
                             : () async {
                                 await _firestore.incrementQuantity(item.id!, -1);
+                                if (item.quantity <= 1) {
+                                  // Ran out entirely — suggest buying more.
+                                  await _firestore.addLowStockToShoppingList([item]);
+                                }
                                 if (ctx.mounted) Navigator.pop(ctx);
                               },
                         icon: const Icon(Icons.remove),
