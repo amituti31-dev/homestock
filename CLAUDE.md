@@ -13,6 +13,23 @@ so a product scanned on the desktop appears on the phone immediately. The
 `InventoryItem` field names and the `InventoryCategory` / `StorageLocation` enum
 *names* are the contract between them — changing one side requires the other.
 
+`InventoryCategory` has 15 values: 5 non-food (`medicine`, `clothingHome`,
+`cosmetics`, `tools`, `hobby`) plus food split into `dairy`, `meatFish`,
+`vegetablesFruits`, `snacks`, `breadBakery`, `beverages`, `cannedDry`,
+`frozen`, `spicesSauces` — with `food` itself kept as a catch-all ("מזון אחר")
+for groceries that don't fit a subcategory. `food` is also `fromName()`'s
+fallback for an unrecognized value, so it stays the safe default rather than
+being removed. `CategoryClassifier` (duplicated in both apps — see their
+Architecture sections) picks between the food subcategories by keyword; its
+map order is a priority order, not just readability — `beverages` and
+`frozen` are checked before `vegetablesFruits`/`snacks` because "מיץ תפוזים"
+(orange juice) and "גלידת שוקולד" (chocolate ice cream) contain a
+fruit/snack keyword but belong to the more specific category. There's no
+single source of truth for the category list: the enum, both apps'
+classifiers, and `GeminiService`'s receipt-parsing prompt (which lists all 15
+values by hand for Gemini to choose from) all need updating together when a
+category is added or renamed.
+
 Public repo at `github.com/amituti31-dev/homestock`. Nothing secret is tracked
 (see `.gitignore` at root) — the Firebase Web API key in
 `desktop_scanner/lib/firebase_config.dart` is not a secret; access is gated by
