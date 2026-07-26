@@ -35,63 +35,80 @@ class NotificationService {
 
   int _notificationId(String itemId) => itemId.hashCode & 0x7fffffff;
 
+  /// A notification is a reminder, not inventory data — a plugin failure
+  /// here (e.g. flutter_local_notifications' Android side has a known bug
+  /// where it crashes reading back its own SharedPreferences cache of
+  /// scheduled notifications, unrelated to anything this app controls) must
+  /// never stop the item save that triggered it.
   Future<void> scheduleExpiryReminder(InventoryItem item) async {
     if (item.id == null) return;
-    final id = _notificationId(item.id!);
-    await _plugin.cancel(id);
+    try {
+      final id = _notificationId(item.id!);
+      await _plugin.cancel(id);
 
-    if (item.expiryDate == null) return;
+      if (item.expiryDate == null) return;
 
-    final leadDays = await getLeadDays();
-    final reminderDate = item.expiryDate!.subtract(Duration(days: leadDays));
-    if (reminderDate.isBefore(DateTime.now())) return;
+      final leadDays = await getLeadDays();
+      final reminderDate = item.expiryDate!.subtract(Duration(days: leadDays));
+      if (reminderDate.isBefore(DateTime.now())) return;
 
-    final scheduledTime = tz.TZDateTime.from(
-      DateTime(reminderDate.year, reminderDate.month, reminderDate.day, 9),
-      tz.local,
-    );
+      final scheduledTime = tz.TZDateTime.from(
+        DateTime(reminderDate.year, reminderDate.month, reminderDate.day, 9),
+        tz.local,
+      );
 
-    await _plugin.zonedSchedule(
-      id,
-      'המוצר "${item.name}" עומד לפוג',
-      'תוקף בעוד $leadDays ימים - ${item.quantity} ${item.unit}',
-      scheduledTime,
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'expiry_reminders',
-          'תזכורות תפוגה',
-          channelDescription: 'התראות על מוצרים שעומדים לפוג תוקף',
-          importance: Importance.high,
-          priority: Priority.high,
+      await _plugin.zonedSchedule(
+        id,
+        'המוצר "${item.name}" עומד לפוג',
+        'תוקף בעוד $leadDays ימים - ${item.quantity} ${item.unit}',
+        scheduledTime,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'expiry_reminders',
+            'תזכורות תפוגה',
+            channelDescription: 'התראות על מוצרים שעומדים לפוג תוקף',
+            importance: Importance.high,
+            priority: Priority.high,
+          ),
         ),
-      ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
-    );
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+    } catch (_) {
+      // Best-effort: the item is already saved either way.
+    }
   }
 
   Future<void> cancelExpiryReminder(String itemId) async {
-    await _plugin.cancel(_notificationId(itemId));
+    try {
+      await _plugin.cancel(_notificationId(itemId));
+    } catch (_) {
+      // Best-effort — see scheduleExpiryReminder.
+    }
   }
 
   Future<void> showLowStockAlert(InventoryItem item) async {
     if (item.id == null) return;
-    final id = _notificationId('${item.id}#lowstock');
+    try {
+      final id = _notificationId('${item.id}#lowstock');
 
-    await _plugin.show(
-      id,
-      'מלאי נמוך: ${item.name}',
-      'נותרו ${item.quantity} ${item.unit} בלבד - כדאי להוסיף לרשימת הקניות',
-      const NotificationDetails(
-        android: AndroidNotificationDetails(
-          'low_stock_alerts',
-          'התראות מלאי נמוך',
-          channelDescription: 'התראות כשכמות מוצר יורדת מתחת לסף המינימלי',
-          importance: Importance.high,
-          priority: Priority.high,
+      await _plugin.show(
+        id,
+        'מלאי נמוך: ${item.name}',
+        'נותרו ${item.quantity} ${item.unit} בלבד - כדאי להוסיף לרשימת הקניות',
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'low_stock_alerts',
+            'התראות מלאי נמוך',
+            channelDescription: 'התראות כשכמות מוצר יורדת מתחת לסף המינימלי',
+            importance: Importance.high,
+            priority: Priority.high,
+          ),
         ),
-      ),
-    );
+      );
+    } catch (_) {
+      // Best-effort — see scheduleExpiryReminder.
+    }
   }
 }
