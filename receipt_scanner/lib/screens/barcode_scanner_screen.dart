@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../models/inventory_category.dart';
 import '../models/inventory_item.dart';
-import '../services/barcode_lookup_service.dart';
 import '../services/category_classifier.dart';
 import '../services/firestore_service.dart';
 import '../services/gemini_service.dart';
+import '../services/product_index_service.dart';
+import '../services/product_resolver.dart';
 import 'add_edit_item_screen.dart';
 
 class BarcodeScannerScreen extends StatefulWidget {
@@ -20,7 +21,8 @@ class BarcodeScannerScreen extends StatefulWidget {
 class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
   final _controller = MobileScannerController();
   late final FirestoreService _firestore;
-  final _lookup = BarcodeLookupService();
+  final _index = ProductIndexService();
+  late final _resolver = ProductResolver(index: _index);
   final _gemini = GeminiService();
   bool _processing = false;
 
@@ -39,6 +41,21 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
   void initState() {
     super.initState();
     _firestore = FirestoreService(widget.householdId);
+    _loadIndex();
+  }
+
+  /// Loads the cached local price index and refreshes it in the background
+  /// when it's gone stale. Scanning works throughout — a missing index just
+  /// means falling back to Open Food Facts, same as before this existed.
+  Future<void> _loadIndex() async {
+    await _index.load();
+    if (_index.isStale) {
+      try {
+        await _index.refresh();
+      } catch (_) {
+        // Best-effort — see BarcodeLookupService.
+      }
+    }
   }
 
   @override
@@ -225,7 +242,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
   }
 
   Future<void> _showNewItemFlow(String barcode) async {
-    final product = await _lookup.lookup(barcode);
+    final product = await _resolver.resolve(barcode);
     final category = product == null
         ? InventoryCategory.food
         : await _classify(product.name);
@@ -240,6 +257,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
             name: product?.name ?? '',
             category: category,
             barcode: barcode,
+            photoUrl: product?.imageUrl,
             source: 'barcode_scan',
           ),
         ),

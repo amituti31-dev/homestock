@@ -119,16 +119,20 @@ document that's gone.
 
 ### Other integrations
 
-- Barcode: `mobile_scanner` → `BarcodeLookupService` (OpenFoodFacts, 6s timeout,
-  returns null on any failure — barcode lookup is best-effort).
-  `BarcodeScannerScreen` has the same add/consume mode toggle as the desktop
-  scanner (see below) — consume mode bumps quantity down (or deletes at the
-  last unit) directly on detection, no sheet, no confirmation. New items get
-  classified by Gemini first, `CategoryClassifier` as fallback (see "Gemini"
-  above), rather than always defaulting to food. A keyboard icon in the app
-  bar opens a manual-entry dialog for a damaged/unscannable barcode — it
-  feeds the same `_handleBarcode` the camera detector uses, so a typed
-  barcode goes through identical lookup/classify/consume-mode handling.
+- Barcode: `mobile_scanner` → `ProductResolver` (local price index first, then
+  OpenFoodFacts — see desktop_scanner's "Product lookup" section; both
+  services and desktop's bundled seed assets are duplicated byte-for-byte
+  into this app). Camera misses used to be common for Israeli products OFF
+  has never heard of but the local index does — losing the index was a real
+  bug, not just an OFF gap. `BarcodeScannerScreen` has the same add/consume
+  mode toggle as the desktop scanner (see below) — consume mode bumps
+  quantity down (or deletes at the last unit) directly on detection, no
+  sheet, no confirmation. New items get classified by Gemini first,
+  `CategoryClassifier` as fallback (see "Gemini" above), rather than always
+  defaulting to food. A keyboard icon in the app bar opens a manual-entry
+  dialog for a damaged/unscannable barcode — it feeds the same
+  `_handleBarcode` the camera detector uses, so a typed barcode goes through
+  identical lookup/classify/consume-mode handling.
 - Notifications: `flutter_local_notifications` + `timezone`, scheduled per item
   expiry date. Lead days stored in `SharedPreferences` (`expiry_reminder_lead_days`,
   default 3).

@@ -85,6 +85,11 @@ flutter:
   assets:
     - .env
     - assets/icon/
+    - assets/shufersal_seed.json
+    - assets/yohananof_seed.json
+    - assets/superpharm_seed.json
+    - assets/hatzi_hinam_seed.json
+    - assets/manual_additions_seed.json
 
   # To add assets to your application, add an assets section, like this:
   # assets:
