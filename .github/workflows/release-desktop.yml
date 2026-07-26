@@ -4,6 +4,10 @@ name: Release desktop scanner
 # desktop_scanner changes on main. The release tag is just the run number
 # (v1, v2, ...) — the app compares that against its own build number
 # (embedded via --build-number at build time) to know when it's out of date.
+#
+# Needs the GEMINI_API_KEY repo secret (Settings > Secrets and variables >
+# Actions) — same secret release-mobile.yml already uses, reused here now
+# that the desktop scanner also calls Gemini to classify scanned products.
 on:
   push:
     branches: [main]
@@ -23,6 +27,10 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+
+      - name: Write secrets to files
+        working-directory: desktop_scanner
+        run: echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" > .env
 
       - name: Install dependencies
         working-directory: desktop_scanner

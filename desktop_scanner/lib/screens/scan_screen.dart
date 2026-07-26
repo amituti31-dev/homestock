@@ -6,6 +6,7 @@ import '../models/inventory_category.dart';
 import '../models/inventory_item.dart';
 import '../services/category_classifier.dart';
 import '../services/firestore_service.dart';
+import '../services/gemini_service.dart';
 import '../services/product_index_service.dart';
 import '../services/product_resolver.dart';
 import '../services/update_service.dart';
@@ -75,6 +76,7 @@ class ScanScreen extends StatefulWidget {
 class _ScanScreenState extends State<ScanScreen> {
   final _index = ProductIndexService();
   late final _resolver = ProductResolver(index: _index);
+  final _gemini = GeminiService();
   final _barcodeController = TextEditingController();
   final _barcodeFocus = FocusNode();
 
@@ -177,6 +179,15 @@ class _ScanScreenState extends State<ScanScreen> {
   /// work" — a stray click elsewhere would otherwise swallow the next scan.
   void _refocus() => _barcodeFocus.requestFocus();
 
+  /// AI classification first (handles cases the keyword list can't), falling
+  /// back to the instant local [CategoryClassifier] whenever Gemini is
+  /// unavailable, over quota, or times out — a scan must never hang waiting
+  /// on the network.
+  Future<InventoryCategory> _classify(String name) async {
+    final aiCategory = await _gemini.classifyProduct(name);
+    return aiCategory ?? CategoryClassifier.classify(name);
+  }
+
   Future<void> _handleScan(String raw) async {
     final barcode = raw.trim();
     _barcodeController.clear();
@@ -207,11 +218,12 @@ class _ScanScreenState extends State<ScanScreen> {
       }
 
       final product = await _resolver.resolve(barcode);
+      final category = product == null
+          ? InventoryCategory.food
+          : await _classify(product.name);
       final item = InventoryItem(
         name: product?.name ?? 'מוצר לא מזוהה',
-        category: product == null
-            ? InventoryCategory.food
-            : CategoryClassifier.classify(product.name),
+        category: category,
         barcode: barcode,
         photoUrl: product?.imageUrl,
         price: product?.price,

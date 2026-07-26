@@ -5,6 +5,7 @@ import '../models/inventory_item.dart';
 import '../services/barcode_lookup_service.dart';
 import '../services/category_classifier.dart';
 import '../services/firestore_service.dart';
+import '../services/gemini_service.dart';
 import 'add_edit_item_screen.dart';
 
 class BarcodeScannerScreen extends StatefulWidget {
@@ -20,6 +21,7 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
   final _controller = MobileScannerController();
   late final FirestoreService _firestore;
   final _lookup = BarcodeLookupService();
+  final _gemini = GeminiService();
   bool _processing = false;
 
   /// Most scans are using something up, not buying it — this switches what a
@@ -186,6 +188,9 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
 
   Future<void> _showNewItemFlow(String barcode) async {
     final product = await _lookup.lookup(barcode);
+    final category = product == null
+        ? InventoryCategory.food
+        : await _classify(product.name);
 
     if (!mounted) return;
     await Navigator.push(
@@ -195,15 +200,22 @@ class _BarcodeScannerScreenState extends State<BarcodeScannerScreen> {
           householdId: widget.householdId,
           prefillItem: InventoryItem(
             name: product?.name ?? '',
-            category: product == null
-                ? InventoryCategory.food
-                : CategoryClassifier.classify(product.name),
+            category: category,
             barcode: barcode,
             source: 'barcode_scan',
           ),
         ),
       ),
     );
+  }
+
+  /// AI classification first (handles cases the keyword list can't), falling
+  /// back to the instant local [CategoryClassifier] whenever Gemini is
+  /// unavailable, over quota, or times out — a scan must never hang waiting
+  /// on the network.
+  Future<InventoryCategory> _classify(String name) async {
+    final aiCategory = await _gemini.classifyProduct(name);
+    return aiCategory ?? CategoryClassifier.classify(name);
   }
 
   @override

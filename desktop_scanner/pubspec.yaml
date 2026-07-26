@@ -41,6 +41,8 @@ dependencies:
   xml: ^7.0.1
   package_info_plus: ^8.3.0
   url_launcher: ^6.3.1
+  flutter_dotenv: ^5.2.1
+  google_generative_ai: ^0.4.6
 
 dev_dependencies:
   flutter_test:
@@ -65,6 +67,7 @@ flutter:
   uses-material-design: true
 
   assets:
+    - .env
     - assets/shufersal_seed.json
     - assets/yohananof_seed.json
     - assets/superpharm_seed.json

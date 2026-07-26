@@ -19,16 +19,24 @@ so a product scanned on the desktop appears on the phone immediately. The
 `frozen`, `spicesSauces` — with `food` itself kept as a catch-all ("מזון אחר")
 for groceries that don't fit a subcategory. `food` is also `fromName()`'s
 fallback for an unrecognized value, so it stays the safe default rather than
-being removed. `CategoryClassifier` (duplicated in both apps — see their
-Architecture sections) picks between the food subcategories by keyword; its
-map order is a priority order, not just readability — `beverages` and
-`frozen` are checked before `vegetablesFruits`/`snacks` because "מיץ תפוזים"
-(orange juice) and "גלידת שוקולד" (chocolate ice cream) contain a
-fruit/snack keyword but belong to the more specific category. There's no
-single source of truth for the category list: the enum, both apps'
-classifiers, and `GeminiService`'s receipt-parsing prompt (which lists all 15
-values by hand for Gemini to choose from) all need updating together when a
-category is added or renamed.
+being removed. There's no single source of truth for the category list: the
+enum, both apps' classifiers, and both of `GeminiService`'s prompts (receipt
+parsing and product classification, each listing all 15 values by hand) all
+need updating together when a category is added or renamed.
+
+Every new item — from a receipt, or a barcode scan on either app — gets
+classified by `GeminiService.classifyProduct` (a short "what category is
+this product name" prompt, distinct from the receipt-parsing one) *first*,
+falling back to the local, instant `CategoryClassifier` (duplicated in both
+apps — see their Architecture sections) whenever Gemini is unavailable, over
+quota, or times out (6s) — a scan must never hang waiting on the network.
+`CategoryClassifier` picks between the food subcategories by keyword; its
+map order is a priority order, not just readability — sauces/spices are
+checked before produce/snack keywords (a jarred "רוטב עגבניות" shouldn't
+land in vegetablesFruits just because it names tomatoes), and `beverages`
+and `frozen` before `vegetablesFruits`/`snacks` because "מיץ תפוזים" (orange
+juice) and "גלידת שוקולד" (chocolate ice cream) contain a fruit/snack
+keyword but belong to the more specific category.
 
 Public repo at `github.com/amituti31-dev/homestock`. Nothing secret is tracked
 (see `.gitignore` at root) — the Firebase Web API key in
@@ -77,11 +85,16 @@ When the household changes, `main.dart` re-runs `ensureHousehold()` and rebuilds
 
 ### Gemini
 
-`GeminiService.parseReceiptImage` and `RecipeService.suggestRecipes` both call
-`gemini-2.5-flash` directly from the client with Hebrew prompts that demand
-JSON-only output, then regex the first `{...}` block out of the response.
-Receipt categories must be one of the exact English enum values in
-`InventoryCategory` — keep the prompt's category list in sync with that enum.
+`GeminiService.parseReceiptImage`, `RecipeService.suggestRecipes` and
+`GeminiService.classifyProduct` all call `gemini-2.5-flash` directly from the
+client with Hebrew prompts. The first two demand JSON-only output and regex
+the first `{...}` block out of the response; `classifyProduct` asks for a
+single bare category value instead (used by the barcode scan flow, see
+below) and is wrapped in a 6s timeout since — unlike a receipt photo, which
+already has a loading spinner — it sits in a scan loop that should feel
+instant. Categories returned by any of these must be one of the exact
+English enum values in `InventoryCategory` — keep each prompt's category
+list in sync with that enum.
 
 ### Running out feeds the shopping list
 
@@ -111,8 +124,8 @@ document that's gone.
   `BarcodeScannerScreen` has the same add/consume mode toggle as the desktop
   scanner (see below) — consume mode bumps quantity down (or deletes at the
   last unit) directly on detection, no sheet, no confirmation. New items get
-  a category guess from `CategoryClassifier` (see below) rather than always
-  defaulting to food.
+  classified by Gemini first, `CategoryClassifier` as fallback (see "Gemini"
+  above), rather than always defaulting to food.
 - Notifications: `flutter_local_notifications` + `timezone`, scheduled per item
   expiry date. Lead days stored in `SharedPreferences` (`expiry_reminder_lead_days`,
   default 3).
@@ -159,8 +172,9 @@ download; neither app self-replaces its own running binary.
 
 A single-purpose intake station: a USB barcode scanner types a barcode, the app
 looks the product up on Open Food Facts and writes it straight into the shared
-inventory. No receipt scanning, no Gemini, no inventory browsing — that stays on
-the phone.
+inventory. No receipt scanning, no inventory browsing — that stays on the
+phone. It does call Gemini now (see Scan flow below), but only a one-line
+"classify this product name" prompt, not receipt parsing.
 
 ## Commands
 
@@ -195,7 +209,9 @@ reinstall doesn't prompt for the household code again.
 on every push to `main` that touches `desktop_scanner/`. The release tag is
 just the CI run number (`v1`, `v2`, ...) — not semver — and the exe is built
 with `--build-number=<run number>` to match, via `subosito/flutter-action` +
-`choco install innosetup` on `windows-latest`.
+`choco install innosetup` on `windows-latest`. Needs the `GEMINI_API_KEY`
+repo secret (the same one `release-mobile.yml` uses) to write `.env` before
+building.
 
 `services/update_service.dart` polls
 `api.github.com/repos/amituti31-dev/homestock/releases/latest` on launch and
@@ -252,11 +268,12 @@ so `_refocus()` is called after every dialog, tap and completed scan.
 Barcode → already in inventory? bump quantity : resolve the product → create the
 item. A miss is **not** an error: the item is still created as 'מוצר לא מזוהה'
 so the scanning loop never blocks, and the activity list offers an edit dialog
-to name it. A resolved product's name also goes through `CategoryClassifier`
-(keyword matching against real product-name vocabulary — no Gemini here, that
-stays on the phone's receipt flow) so new items land in a real category
-instead of always defaulting to food; still editable afterward, it's a guess,
-not a guarantee. Duplicated into `receipt_scanner` for its own barcode flow.
+to name it. A resolved product's name is classified by `GeminiService.classifyProduct`
+first, falling back to the local `CategoryClassifier` (keyword matching against
+real product-name vocabulary) whenever Gemini is unavailable, over quota, or
+past its 6s timeout, so new items land in a real category instead of always
+defaulting to food; still editable afterward, it's a guess, not a guarantee.
+Both services are duplicated into `receipt_scanner` for its own barcode flow.
 
 A `SegmentedButton` above the scanner input switches between **add mode**
 (green tint, the default — the flow above) and **consume mode** (red tint):
@@ -331,6 +348,10 @@ encoding should fail loudly there, not silently corrupt the file.
 - Firebase project ID and Web API key are in `lib/firebase_config.dart`. The Web
   API key is not a secret — it identifies the project, and access is controlled
   by `receipt_scanner/firestore.rules`.
+- Secrets: `GEMINI_API_KEY` in `desktop_scanner/.env` (same value as
+  `receipt_scanner/.env`), loaded via `flutter_dotenv` and bundled as an
+  asset — same pattern as the mobile app. `.env` is untracked (see root
+  `.gitignore`).
 - Models are deliberately duplicated from the mobile app rather than shared via a
   package. If that duplication starts to hurt, extract a `shared/` Dart package —
   but keep the Firestore field names identical either way.
